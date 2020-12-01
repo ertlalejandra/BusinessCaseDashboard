@@ -1,0 +1,137 @@
+---
+title: "Tricentis Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+#runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(dbplyr)
+library(DT)
+library(viridis) 
+library(flexdashboard)
+library(shiny)
+startData <- read.csv(file='~/Desktop/tricentisdashboard/tricentis.csv')
+GBChoices <- c("Customers","Product")
+cust<- unique(factor(startData$Customers))
+YChoices<-c("Events","TotalEvents","Licenses","Percentage_of_Use")
+
+
+```
+
+
+Graphs
+==========================================================
+Sidebar {.sidebar}
+----------------------------------------------------------
+```{r}
+selectInput(inputId = "GB",label = "Category",choices = GBChoices)
+selectInput(inputId = "Metric",label = "Metric",choices = YChoices)
+selectInput(inputId = "Cust",label = "Customer",choices = cust)
+```
+
+###   
+```{r}
+
+meanevents <-
+  startData %>% group_by(Product) %>% summarise(Average=round(mean(Events)))
+
+library(knitr)
+ kable(meanevents[1:5,1:2])
+
+```
+
+Row {}
+----------------------------------------------------------
+
+### General Bar Plot
+
+```{r}
+updateData <- reactive(
+  startData %>% group_by(!!! rlang::syms(input$GB)))
+
+renderPlot({
+ updateData() %>% 
+  ggplot(aes(x=!! rlang::sym(input$GB),y=!! rlang::sym(input$Metric),fill=!! rlang::sym(input$GB))) +
+  ggtitle(paste(input$Metric, "per", input$GB))+
+  theme(plot.title = element_text(size = 22, face = "bold") )+
+  geom_col()
+})
+```
+
+### Events per Customer (select Customer in the sidebar)
+
+```{r}
+
+ColCust <- reactive(
+  #startData %>% group_by(!!! rlang::syms(input$Cust)))
+  startData %>% group_by(Customers, Product, Events) %>% summarise( ) %>% subset(Customers==input$Cust) )
+
+renderPlot({
+ ColCust() %>% 
+  ggplot(aes(x=Product,y=Events, fill=Product)) +
+  geom_col()+
+  ggtitle(input$Cust)+
+  theme(plot.title = element_text(size = 22, face = "bold") )+
+  scale_fill_manual("Type of Event", values = c("Admin" = "grey", "Automate" = "blue", "Design" = "red", 
+                                         "Execute"="darkgreen", "Explore"="purple"))
+    
+})
+```
+
+Row
+---------------------------------------------------------
+
+### Box Plot
+```{r}
+
+boxdata<-pdateData <- reactive(
+  startData %>% group_by(!!! rlang::syms(input$GB))) 
+
+renderPlot({
+ boxdata() %>% 
+  ggplot(aes_string(input$GB,input$Metric, fill=input$GB)) + 
+  geom_boxplot(alpha=0.3) +
+  theme(legend.position="none")
+  })
+```
+
+### Percentage of Use per Customer (select Customer in the sidebar)
+
+```{r}
+
+piedata<-reactive(
+  startData%>% 
+  group_by(Customers, Product, Percentage_of_Use) %>% summarise() %>% subset(Customers == input$Cust))
+
+
+renderPlot({
+ piedata() %>% 
+ ggplot(aes(x="",y=Percentage_of_Use, fill=Product)) +
+  geom_bar(stat="identity", width=1) +
+  coord_polar("y")+
+  theme_void() +
+  scale_fill_manual("Type of Event", values = c("Admin" = "grey", "Automate" = "blue", "Design" = "red", 
+                                                   "Execute"="darkgreen", "Explore"="purple")) +
+    ggtitle(input$Cust)+
+    theme(plot.title = element_text(size = 22, face = "bold")) 
+    #geom_text(aes( x= 0, y=Percentage_of_Use , label = Percentage_of_Use))
+
+  })
+```
+
+Table
+==========================================================
+```{r}
+
+renderDT(
+  startData, rownames = F, extensions = 'Buttons', filter="top", editable=T,
+  options = list(
+    dom = 'Blfrtip',
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
+    lengthMenu = list(c(10,50,100,-1),c(10,50,100,"All"))
+  )
+)
+```
